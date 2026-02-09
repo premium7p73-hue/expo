@@ -174,6 +174,25 @@ public class AudioPlayer: SharedRef<AVPlayer> {
       .store(in: &cancellables)
   }
 
+  func replaceWithPreloadedItem(_ item: AVPlayerItem?) {
+    let wasPlaying = ref.timeControlStatus == .playing
+    let wasSamplingEnabled = samplingEnabled
+    ref.pause()
+
+    if samplingEnabled {
+      uninstallTap()
+    }
+    ref.replaceCurrentItem(with: item)
+
+    if wasSamplingEnabled {
+      shouldInstallAudioTap = true
+    }
+
+    if wasPlaying {
+      ref.play()
+    }
+  }
+
   func replaceCurrentSource(source: AudioSource) {
     let wasPlaying = ref.timeControlStatus == .playing
     let wasSamplingEnabled = samplingEnabled
@@ -183,7 +202,8 @@ public class AudioPlayer: SharedRef<AVPlayer> {
     if samplingEnabled {
       uninstallTap()
     }
-    ref.replaceCurrentItem(with: AudioUtils.createAVPlayerItem(from: source))
+    let item = AudioUtils.createAVPlayerItem(from: source)
+    ref.replaceCurrentItem(with: item)
 
     if wasSamplingEnabled {
       shouldInstallAudioTap = true
