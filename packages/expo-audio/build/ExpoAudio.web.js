@@ -160,5 +160,23 @@ export async function requestRecordingPermissionsAsync() {
 export async function getRecordingPermissionsAsync() {
     return await AudioModule.getRecordingPermissionsAsync();
 }
+export function preload(source, _options = {}) {
+    const resolved = resolveSource(source);
+    if (!resolved)
+        return;
+    AudioModule.preload(resolved);
+}
+export function clearPreloadedSource(source) {
+    const resolved = resolveSource(source);
+    if (!resolved)
+        return;
+    AudioModule.clearPreloadedSource(resolved);
+}
+export function clearAllPreloadedSources() {
+    AudioModule.clearAllPreloadedSources();
+}
+export function getPreloadedSources() {
+    return AudioModule.getPreloadedSources();
+}
 export { AudioModule };
 //# sourceMappingURL=ExpoAudio.web.js.map

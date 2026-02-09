@@ -7,6 +7,7 @@ import {
   AudioPlayerOptions,
   AudioSource,
   AudioStatus,
+  PreloadOptions,
   RecorderState,
   RecordingOptions,
   RecordingStatus,
@@ -227,6 +228,26 @@ export async function requestRecordingPermissionsAsync(): Promise<PermissionResp
 
 export async function getRecordingPermissionsAsync(): Promise<PermissionResponse> {
   return await AudioModule.getRecordingPermissionsAsync();
+}
+
+export function preload(source: AudioSource, _options: PreloadOptions = {}): void {
+  const resolved = resolveSource(source);
+  if (!resolved) return;
+  AudioModule.preload(resolved);
+}
+
+export function clearPreloadedSource(source: AudioSource): void {
+  const resolved = resolveSource(source);
+  if (!resolved) return;
+  AudioModule.clearPreloadedSource(resolved);
+}
+
+export function clearAllPreloadedSources(): void {
+  AudioModule.clearAllPreloadedSources();
+}
+
+export function getPreloadedSources(): string[] {
+  return AudioModule.getPreloadedSources();
 }
 
 export { AudioModule };

@@ -6,6 +6,8 @@
 
 ### 🎉 New features
 
+- Add support for preloading audio sources. ([#43063](https://github.com/expo/expo/pull/43063) by [@alanjhughes](https://github.com/alanjhughes))
+
 ### 🐛 Bug fixes
 
 ### 💡 Others

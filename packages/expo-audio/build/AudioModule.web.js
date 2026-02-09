@@ -6,6 +6,8 @@ const nextId = (() => {
     let id = 0;
     return () => id++;
 })();
+// Preload cache: maps original source URIs to pre-fetched blob URLs
+const preloadCache = new Map();
 async function getPermissionWithQueryAsync(name) {
     if (!navigator || !navigator.permissions || !navigator.permissions.query)
         return null;
@@ -179,7 +181,9 @@ export class AudioPlayerWeb extends globalThis.expo.SharedObject {
     clearLockScreenControls() { }
     _createMediaElement() {
         const newSource = getSourceUri(this.src);
-        const media = new Audio(newSource);
+        // Check preload cache for a pre-fetched blob URL
+        const cachedUri = newSource && preloadCache.has(newSource) ? preloadCache.get(newSource).blobUrl : newSource;
+        const media = new Audio(cachedUri);
         if (this.crossOrigin !== undefined) {
             media.crossOrigin = this.crossOrigin;
         }
@@ -398,6 +402,42 @@ export class AudioRecorderWeb extends globalThis.expo.SharedObject {
 }
 export async function setAudioModeAsync(mode) { }
 export async function setIsAudioActiveAsync(active) { }
+export function preload(source) {
+    const uri = getSourceUri(source);
+    if (!uri || preloadCache.has(uri))
+        return;
+    const headers = source && typeof source === 'object' && !Array.isArray(source) ? source.headers : undefined;
+    fetch(uri, headers ? { headers } : undefined)
+        .then((response) => response.blob())
+        .then((blob) => {
+        const blobUrl = URL.createObjectURL(blob);
+        const audio = new Audio(blobUrl);
+        audio.preload = 'auto';
+        preloadCache.set(uri, { blobUrl, audio });
+    })
+        .catch(() => {
+        // Silently ignore preload failures
+    });
+}
+export function clearPreloadedSource(source) {
+    const uri = getSourceUri(source);
+    if (!uri)
+        return;
+    const cached = preloadCache.get(uri);
+    if (cached) {
+        URL.revokeObjectURL(cached.blobUrl);
+        preloadCache.delete(uri);
+    }
+}
+export function clearAllPreloadedSources() {
+    for (const cached of preloadCache.values()) {
+        URL.revokeObjectURL(cached.blobUrl);
+    }
+    preloadCache.clear();
+}
+export function getPreloadedSources() {
+    return Array.from(preloadCache.keys());
+}
 export async function getRecordingPermissionsAsync() {
     const maybeStatus = await getPermissionWithQueryAsync('microphone');
     switch (maybeStatus) {

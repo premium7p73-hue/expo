@@ -68,6 +68,10 @@ export declare class AudioRecorderWeb extends globalThis.expo.SharedObject<Recor
 }
 export declare function setAudioModeAsync(mode: AudioMode): Promise<void>;
 export declare function setIsAudioActiveAsync(active: boolean): Promise<void>;
+export declare function preload(source: AudioSource): void;
+export declare function clearPreloadedSource(source: AudioSource): void;
+export declare function clearAllPreloadedSources(): void;
+export declare function getPreloadedSources(): string[];
 export declare function getRecordingPermissionsAsync(): Promise<PermissionResponse>;
 export declare function requestRecordingPermissionsAsync(): Promise<PermissionResponse>;
 //# sourceMappingURL=AudioModule.web.d.ts.map
