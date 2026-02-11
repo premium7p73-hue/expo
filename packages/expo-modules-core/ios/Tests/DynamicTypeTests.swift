@@ -31,7 +31,7 @@ struct DynamicTypeTests {
     @Test
     func `is created`() {
       #expect(~Any.self is DynamicRawType<Any>)
-      #expect(~Bool.self is DynamicRawType<Bool>)
+      #expect(~Bool.self is DynamicBoolType)
       #expect(~DynamicRawTypeTests.self is DynamicRawType<DynamicRawTypeTests>)
     }
 
@@ -65,16 +65,16 @@ struct DynamicTypeTests {
     }
 
     @Test
-    func `throws NullCastException`() {
+    func `throws CastingException<Bool>`() {
       let value: Bool? = nil
 
-      #expect(throws: Conversions.NullCastException<Bool>.self) {
+      #expect(throws: Conversions.CastingException<Bool>.self) {
         try (~Bool.self).cast(value as Any, appContext: appContext)
       }
     }
 
     @Test
-    func `throws CastingException`() {
+    func `throws CastingException<String>`() {
       #expect(throws: Conversions.CastingException<String>.self) {
         try (~String.self).cast(true, appContext: appContext)
       }
