@@ -1,154 +1,602 @@
----
-title: EAS Build
-sidebar_title: Introduction
-description: EAS Build is a hosted service for building app binaries for your Expo and React Native projects.
----
+import React, { useState, useEffect } from 'react';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  TextInput, 
+  TouchableOpacity, 
+  FlatList, 
+  SafeAreaView, 
+  ActivityIndicator, 
+  Modal, 
+  KeyboardAvoidingView, 
+  Platform,
+  Alert,
+  Image
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 
-import { Cube01Icon } from '@expo/styleguide-icons/outline/Cube01Icon';
+// ---------------------------------------------------------
+// 1. استيراد مكتبات Firebase
+// ---------------------------------------------------------
+import { initializeApp, getApps } from 'firebase/app';
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  onAuthStateChanged, 
+  updateProfile, 
+  signOut 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  updateDoc, 
+  doc, 
+  increment, 
+  serverTimestamp 
+} from 'firebase/firestore';
 
-import { BoxLink } from '~/ui/components/BoxLink';
-import { Collapsible } from '~/ui/components/Collapsible';
-import { NoIcon, YesIcon } from '~/ui/components/DocIcons';
-import { Terminal } from '~/ui/components/Snippet';
+// ---------------------------------------------------------
+// 🔴 إعدادات Firebase var admin = require("firebase-admin");
 
-**EAS Build** is a hosted Expo Application Services (EAS) service that builds app binaries (also called [standalone apps](/more/glossary-of-terms/#standalone-app)) for your Expo and React Native projects.
+var serviceAccount = require("path/to/serviceAccountKey.json");
 
-EAS Build makes building your apps for distribution simple and easy to automate by providing defaults that work well for Expo and React Native projects out of the box, and by handling your app signing credentials for you (if you wish). It also makes sharing builds with your team easier than ever with [internal distribution](/build/internal-distribution/) (using [ad hoc](/build/internal-distribution/) and/or enterprise "universal" provisioning), deeply integrates with EAS Submit for app store submissions, and has first-class support for the [`expo-updates`](/build/updates/) library.
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
-EAS Build is also designed to work for any native project, whether or not you use Expo and React Native. It's the fastest way to get from `npx create-expo-app` or `npx @react-native-community/cli@latest init` to app stores.
+// ---------------------------------------------------------
+const firebaseConfig = {
+  apiKey: "AIzaSyD-EXAMPLE-API-KEY",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project-id",
+  storageBucket: "your-project.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456:web:xxxxxx"
+};
 
-## Quick start
+// تهيئة التطبيق (Singleton Pattern)
+let app;
+let auth;
+let db;
 
-To build your app, run the following command:
+if (!getApps().length) {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } catch (error) {
+    console.error("Firebase Init Error:", error);
+  }
+} else {
+  app = getApps()[0];
+  auth = getAuth(app);
+  db = getFirestore(app);
+}
 
-<Terminal cmd={['$ eas build --platform all']} />
+// ---------------------------------------------------------
+// 2. المكونات (Components)
+// ---------------------------------------------------------
 
-This command sends your project to EAS Build and produces installable binaries for Android and iOS. You can also build for one platform at a time by passing in `--platform android` or `--platform ios` as desired. For complete setup instructions, see [Create your first build](/build/setup/).
+// --- شاشة تسجيل الدخول ---
+const AuthScreen = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
 
-## Key features
+  const handleAuth = async () => {
+    if(!email || !password) {
+      Alert.alert("تنبيه", "الرجاء إدخال البريد وكلمة المرور");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (isLogin) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(cred.user, { displayName: name || 'مستخدم جديد' });
+      }
+    } catch (error) {
+      let msg = error.message;
+      if (error.code === 'auth/email-already-in-use') msg = 'البريد مسجل مسبقاً';
+      if (error.code === 'auth/weak-password') msg = 'كلمة المرور ضعيفة';
+      Alert.alert("خطأ", msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-- Cloud builds for Android and iOS with consistent environments
-- Automatically provision and manage app signing credentials or use your own
-- Share [internal distribution](/build/internal-distribution/) builds with a URL
-- Automate builds with [build profiles](/build/eas-json/#build-profiles) in **eas.json** (named sets of build settings) and integrations with [EAS Workflows](/eas/workflows/get-started/) or [CI pipelines](/build/building-on-ci/)
-- Auto-submit successful builds to app stores via [`--auto-submit`](/build/automate-submissions/) and EAS Submit
-- First-class [`expo-updates` integration](/build/updates/) with per-profile channels and [runtime version](/eas-update/runtime-versions/) guidance
-- Reuse [development builds](/develop/development-builds/introduction/) across your team. When two team members run `eas build:dev` and the project fingerprint matches, the existing build is downloaded from EAS instead of creating a new one
-- Faster builds via [dependency caching and custom cache paths](/build-reference/caching/)
-- Install builds and updates on devices with [Expo Orbit](https://expo.dev/orbit)
+  return (
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === "ios" ? "padding" : "height"} 
+      style={styles.container}
+    >
+      <View style={styles.authContainer}>
+        <View style={styles.logoContainer}>
+          <Ionicons name="mic-circle" size={80} color="#818cf8" />
+          <Text style={styles.logoText}>راوي</Text>
+          <Text style={styles.subtitle}>صوتك مسموع</Text>
+        </View>
 
-## When to use EAS Build
+        {!isLogin && (
+          <TextInput 
+            placeholder="الاسم الكامل" 
+            placeholderTextColor="#64748b"
+            style={styles.input} 
+            value={name}
+            onChangeText={setName}
+            textAlign="right"
+          />
+        )}
+        <TextInput 
+          placeholder="البريد الإلكتروني" 
+          placeholderTextColor="#64748b"
+          style={styles.input} 
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          textAlign="right"
+        />
+        <TextInput 
+          placeholder="كلمة المرور" 
+          placeholderTextColor="#64748b"
+          style={styles.input} 
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          textAlign="right"
+        />
 
-| Scenario                                                                             | Recommendation |
-| ------------------------------------------------------------------------------------ | -------------- |
-| Build production-ready binaries for app stores                                       | <YesIcon />    |
-| Share builds with testers via [internal distribution](/build/internal-distribution/) | <YesIcon />    |
-| Consistent builds across team members without local environment setup                | <YesIcon />    |
-| Automate builds from CI or [EAS Workflows](/eas/workflows/get-started/)              | <YesIcon />    |
-| Managed app signing credentials                                                      | <YesIcon />    |
-| Debugging native code locally                                                        | <NoIcon />     |
+        <TouchableOpacity style={styles.primaryButton} onPress={handleAuth} disabled={loading}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{isLogin ? 'تسجيل الدخول' : 'إنشاء حساب'}</Text>}
+        </TouchableOpacity>
 
-## Frequently asked questions
+        <TouchableOpacity onPress={() => setIsLogin(!isLogin)} style={{marginTop: 20}}>
+          <Text style={styles.linkText}>
+            {isLogin ? 'ليس لديك حساب؟ انضم إلينا' : 'لديك حساب بالفعل؟ سجل دخولك'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+};
 
-<Collapsible summary="How do I share builds with my team before submitting to app stores?">
+// --- بطاقة المنشور ---
+const PostCard = ({ item, currentUserId }) => {
+  const [liked, setLiked] = useState(false);
 
-Use [internal distribution](/build/internal-distribution/) to share builds with a URL. Set `"distribution": "internal"` in your [build profile](/build/eas-json/#build-profiles) in **eas.json** to generate installable Android Package (APK) files for Android or [ad hoc builds](/build/internal-distribution/) for iOS.
+  const handleLike = async () => {
+    setLiked(!liked);
+    try {
+      const ref = doc(db, 'posts', item.id);
+      await updateDoc(ref, { likes: increment(liked ? -1 : 1) });
+    } catch (e) { console.log(e); }
+  };
 
-</Collapsible>
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={styles.userInfo}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{item.username?.[0]?.toUpperCase() || '?'}</Text>
+          </View>
+          <View>
+            <Text style={styles.username}>{item.username}</Text>
+            <Text style={styles.date}>الآن</Text>
+          </View>
+        </View>
+        <View style={styles.typeBadge}>
+          <Ionicons 
+            name={item.type === 'video' ? 'videocam' : item.type === 'audio' ? 'mic' : 'text'} 
+            size={12} 
+            color="#94a3b8" 
+          />
+        </View>
+      </View>
 
-<Collapsible summary="Can I use EAS Build with existing React Native projects?">
+      <Text style={styles.postContent}>{item.content}</Text>
 
-Yes. EAS Build works with existing React Native projects created with `npx react-native init` or similar tools. See [Overview of using Expo with existing React Native apps](/bare/overview/) for more information.
+      {/* منطقة الوسائط (Placeholder) */}
+      {(item.type === 'video' || item.type === 'audio') && (
+        <View style={styles.mediaPlaceholder}>
+          <Ionicons 
+            name={item.type === 'video' ? 'play-circle' : 'musical-notes'} 
+            size={50} 
+            color="#fff" 
+            style={{opacity: 0.8}}
+          />
+          <Text style={{color: '#64748b', marginTop: 10, fontSize: 12}}>
+            {item.type === 'video' ? 'فيديو مرفق' : 'مقطع صوتي'}
+          </Text>
+        </View>
+      )}
 
-</Collapsible>
+      <View style={styles.cardFooter}>
+        <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
+          <Ionicons name={liked ? "heart" : "heart-outline"} size={22} color={liked ? "#ec4899" : "#94a3b8"} />
+          <Text style={[styles.actionText, liked && {color: '#ec4899'}]}>{item.likes || 0}</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.actionBtn}>
+          <Ionicons name="chatbubble-outline" size={20} color="#94a3b8" />
+          <Text style={styles.actionText}>تعليق</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
 
-<Collapsible summary="Does EAS Build handle app signing credentials?">
+// --- التطبيق الرئيسي ---
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newPostContent, setNewPostContent] = useState('');
+  const [postType, setPostType] = useState('text'); // text, audio, video
 
-Yes. EAS Build can generate and manage Android [keystores](/app-signing/app-credentials/#android), iOS [provisioning profiles](/app-signing/app-credentials/#ios) and [distribution certificates](/app-signing/app-credentials/#ios), or use credentials you provide. See [App signing credentials](/app-signing/app-credentials/) for more information.
+  // مراقبة الدخول
+  useEffect(() => {
+    if (!auth) return;
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return unsubscribe;
+  }, []);
 
-</Collapsible>
+  // جلب المنشورات
+  useEffect(() => {
+    if (!user || !db) return;
+    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setPosts(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return unsubscribe;
+  }, [user]);
 
-<Collapsible summary="Can I run builds locally instead of in the cloud?">
+  const handlePublish = async () => {
+    if (!newPostContent.trim()) return;
+    try {
+      await addDoc(collection(db, 'posts'), {
+        uid: user.uid,
+        username: user.displayName || 'مجهول',
+        content: newPostContent,
+        type: postType,
+        likes: 0,
+        createdAt: serverTimestamp()
+      });
+      setNewPostContent('');
+      setModalVisible(false);
+    } catch (e) {
+      Alert.alert("خطأ", "فشل النشر: " + e.message);
+    }
+  };
 
-Yes. Use [local builds](/build-reference/local-builds/) with `eas build --local` to run builds on your machine. This is useful for debugging or for security policies that require local builds.
+  if (!user) return <AuthScreen />;
 
-</Collapsible>
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="light" />
+      
+      {/* الهيدر */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>راوي</Text>
+        <TouchableOpacity onPress={() => signOut(auth)}>
+          <Ionicons name="log-out-outline" size={24} color="#94a3b8" />
+        </TouchableOpacity>
+      </View>
 
-<Collapsible summary="Can I use EAS Build with EAS Workflows or CI pipelines?">
+      {/* قائمة المنشورات */}
+      <FlatList
+        data={posts}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => <PostCard item={item} currentUserId={user.uid} />}
+        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+        ListEmptyComponent={
+          <View style={{alignItems: 'center', marginTop: 100}}>
+            <Ionicons name="library-outline" size={60} color="#334155" />
+            <Text style={{color: '#64748b', marginTop: 10}}>لا توجد منشورات بعد</Text>
+          </View>
+        }
+      />
 
-Yes. EAS Build integrates with [EAS Workflows](/eas/workflows/get-started/) using the `build` job type. Add a build job to your workflow configuration, for example:
+      {/* زر إضافة منشور */}
+      <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
+        <Ionicons name="add" size={32} color="#fff" />
+      </TouchableOpacity>
 
-```yaml
-jobs:
-  build_ios:
-    type: build
-    params:
-      platform: ios
-```
+      {/* نافذة إنشاء منشور */}
+      <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={() => setModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalContent}>
+            
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>منشور جديد</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
 
-The build job supports builds for both platforms or conditional builds based on the branch:
+            <TextInput 
+              style={styles.postInput}
+              placeholder="بماذا تفكر؟"
+              placeholderTextColor="#64748b"
+              multiline
+              value={newPostContent}
+              onChangeText={setNewPostContent}
+              textAlign="right"
+            />
 
-```yaml
-jobs:
-  build:
-    type: build
-    params:
-      platform: all
-      profile: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
-```
+            {/* أزرار اختيار النوع */}
+            <View style={styles.typeSelector}>
+              <TouchableOpacity onPress={() => setPostType('text')} style={[styles.typeBtn, postType === 'text' && styles.activeTypeBtn]}>
+                <Ionicons name="text" size={20} color={postType === 'text' ? '#fff' : '#94a3b8'} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setPostType('audio')} style={[styles.typeBtn, postType === 'audio' && styles.activeTypeBtn]}>
+                <Ionicons name="mic" size={20} color={postType === 'audio' ? '#fff' : '#94a3b8'} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setPostType('video')} style={[styles.typeBtn, postType === 'video' && styles.activeTypeBtn]}>
+                <Ionicons name="videocam" size={20} color={postType === 'video' ? '#fff' : '#94a3b8'} />
+              </TouchableOpacity>
+            </View>
 
-For more information and other usage examples, see the [EAS Workflows build job](/eas/workflows/pre-packaged-jobs#build).
+            <TouchableOpacity style={styles.publishBtn} onPress={handlePublish}>
+              <Text style={styles.publishBtnText}>نشر الآن</Text>
+              <Ionicons name="send" size={18} color="#fff" style={{marginLeft: 8}} />
+            </TouchableOpacity>
 
-EAS Build supports [builds from GitHub](/build/building-from-github/) and [building on CI](/build/building-on-ci/) with any provider.
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
-</Collapsible>
+    </SafeAreaView>
+  );
+}
 
-<Collapsible summary="What build server infrastructure does EAS Build use?">
-
-Android builds run on Linux runners hosted in Google Cloud Platform, and iOS builds run on macOS runners hosted in Expo's macOS cloud. See [Build server infrastructure](/build-reference/infrastructure/).
-
-</Collapsible>
-
-## Get started
-
-<BoxLink
-  title="Create your first build"
-  description="It should only take a few minutes in total to get up and running for iOS and/or Android."
-  href="/build/setup"
-  Icon={Cube01Icon}
-/>
-
-<BoxLink
-  title="Share your apps with internal testers"
-  description="EAS Build can help share preview builds of your app with a single URL."
-  href="/build/internal-distribution"
-  Icon={Cube01Icon}
-/>
-
-<BoxLink
-  title="Automate submissions"
-  description="Learn how EAS Build can take your successful builds and handle uploading them to app stores automatically."
-  href="/build/automate-submissions"
-  Icon={Cube01Icon}
-/>
-
-<BoxLink
-  title="App version management"
-  description="Automate version bumps so you never have to think about them again."
-  href="/build-reference/app-versions"
-  Icon={Cube01Icon}
-/>
-
-<BoxLink
-  title="Run builds locally or on your own infrastructure"
-  description="EAS Build is a hosted service, and it can also run on your own machine, for example, to debug or to comply with company security policies."
-  href="/build-reference/local-builds"
-  Icon={Cube01Icon}
-/>
-
-<BoxLink
-  title="Limitations"
-  description="EAS Build is new and rapidly evolving, so we recommend getting familiar with the current limitations."
-  href="/build-reference/limitations"
-  Icon={Cube01Icon}
-/>
+// ---------------------------------------------------------
+// 3. التنسيقات (Styles)
+// ---------------------------------------------------------
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0f172a', // خلفية داكنة
+    paddingTop: Platform.OS === 'android' ? 30 : 0
+  },
+  // Auth Styles
+  authContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 50,
+  },
+  logoText: {
+    fontSize: 42,
+    fontWeight: 'bold',
+    color: '#818cf8',
+    marginTop: 10,
+  },
+  subtitle: {
+    color: '#94a3b8',
+    fontSize: 16,
+  },
+  input: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: '#334155',
+    fontSize: 16,
+  },
+  primaryButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+    marginTop: 10,
+    shadowColor: '#6366f1',
+    shadowOpacity: 0.3,
+    shadowOffset: {width: 0, height: 4},
+    elevation: 5,
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  linkText: {
+    color: '#818cf8',
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  // Header
+  header: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#818cf8',
+  },
+  // Post Card
+  card: {
+    backgroundColor: '#1e293b',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  cardHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  userInfo: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#6366f1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
+  avatarText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  username: {
+    color: '#f8fafc',
+    fontWeight: 'bold',
+    fontSize: 15,
+    textAlign: 'right',
+  },
+  date: {
+    color: '#64748b',
+    fontSize: 11,
+    textAlign: 'right',
+  },
+  typeBadge: {
+    backgroundColor: '#334155',
+    padding: 6,
+    borderRadius: 8,
+  },
+  postContent: {
+    color: '#e2e8f0',
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'right',
+    marginBottom: 12,
+  },
+  mediaPlaceholder: {
+    height: 160,
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  cardFooter: {
+    flexDirection: 'row-reverse',
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+    paddingTop: 12,
+    justifyContent: 'space-between',
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 5,
+  },
+  actionText: {
+    color: '#94a3b8',
+    marginLeft: 6,
+    fontSize: 13,
+  },
+  // FAB
+  fab: {
+    position: 'absolute',
+    bottom: 30,
+    right: 20,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#ec4899',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: '#ec4899',
+    shadowOpacity: 0.4,
+    shadowOffset: {width: 0, height: 4},
+  },
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1e293b',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    padding: 24,
+    minHeight: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  postInput: {
+    backgroundColor: '#0f172a',
+    borderRadius: 16,
+    padding: 16,
+    color: '#fff',
+    height: 120,
+    textAlignVertical: 'top',
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  typeSelector: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'center',
+    gap: 15,
+    marginBottom: 25,
+  },
+  typeBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTypeBtn: {
+    backgroundColor: '#6366f1',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  publishBtn: {
+    backgroundColor: '#6366f1',
+    borderRadius: 16,
+    padding: 18,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  publishBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+  }
+})
