@@ -6,6 +6,8 @@
 
 ### 🎉 New features
 
+- [iOS] Add support for `shouldRouteThroughEarpiece`.
+
 ### 🐛 Bug fixes
 
 ### 💡 Others
