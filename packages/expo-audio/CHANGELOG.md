@@ -6,6 +6,8 @@
 
 ### 🎉 New features
 
+- [Android] Make it possible to add/remove the foreground service and foreground service permissions with a config plugin.
+
 ### 🐛 Bug fixes
 
 - [Android] Fix memory leaks when refreshing the app. ([#42785](https://github.com/expo/expo/pull/42785) by [@behenate](https://github.com/behenate))
